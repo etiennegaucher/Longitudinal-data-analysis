@@ -1,0 +1,182 @@
+---
+title: "Survival and longitudinal data analysis"
+subtitle: "Exercise 8.11 of Klein and Moeschberger"
+author: "Etienne Gaucher"
+date: "12/10/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+L'étude que nous allons mener consiste à savoir s'il existe ou non un lien entre l'allaitement des nouveau-nés et le risque de développer une pneumonie lors des 12 premiers mois de la vie. 3 470 nourrissons ont participé à l'enquête entre 1979 et 1986, et pour chacun, on a noté la durée entre la naissance et le développement d'une pneumonie. Puisque l'étude ne s'intéresse qu'aux 12 premiers mois, une censure à droite s'impose, car certains nourrissons ne seront pas atteints lors des 12 premiers mois. Parmi les covariables, on retrouve par exemple l'âge de la mère, sa consommation d'alcool et de tabac pendant la grossesse ou le nombre de frères et sœurs du nouveau-né.
+
+Tout d'abord, on commence par importer les données nécessaires à cette étude. Les données sont stockées dans le package **KMsurv** sous le nom 'pneumon'. Les variables qualitatives font l'objet d'une attention particulière pour qu'elles soient considérées en tant que *factor* et non *integer* ou *numeric*. Cela aura un intérêt pour une éventuelle régression.
+
+```{r, warning=FALSE, message=FALSE}
+# import des librairies
+library(KMsurv)
+library(tidyverse)
+
+# import des données et recodage
+data(pneumon)
+pneumon<-pneumon %>% dplyr::select(-agepn) %>% mutate(region = as.factor(region), 
+                                                      race = as.factor(race), 
+                                                      urban = as.factor(urban),
+                                                      alcohol = as.factor(alcohol),
+                                                      smoke = as.factor(smoke),
+                                                      poverty = as.factor(poverty))
+```
+
+# Question 1
+
+Pour s'assurer que les données ont été correctement importées, on peut visualiser une partie des données, par exemple les premières lignes.
+
+```{r}
+head(pneumon)
+
+# type de chaque variable
+sapply(pneumon, class)
+```
+
+Toutes les variables semblent être correctement importées.
+
+# Question 2
+
+Pour construire l'estimateur de Kaplan-Meier, on utilise la librairie 'survival'. L'estimateur de Kaplan-Meier est une estimation non-paramétrique de la fonction de survie.
+
+```{r, message=FALSE, warning=FALSE}
+# import des librairies
+library(survival)
+library(ggfortify)
+
+# estimateur de Kaplan-Meier
+km<-survfit(Surv(chldage, hospital) ~ 1, data = pneumon)
+
+# graphique de l'estimateur de Kaplan-Meier
+autoplot(km, xlab = "Time (month)", ylab = "Survival Probability")
+```
+
+L'intervalle de confiance de l'estimateur est représenté par la bande grisée sur le graphique.
+On souhaite connaître la probabilité de ne pas développer une pneumonie lors des 6 premiers mois pour un nouveau-né. Afin d'être plus précis qu'une simple lecture sur le graphique, on recherche les valeurs exactes.
+
+```{r}
+summary(km)
+```
+
+La probabilité pour un nouveau-né de ne pas développer une pneumonie lors des 6 premiers mois est 0,981.
+L'intervalle de confiance de cette probabilité est $[0.976,0.986]$.
+
+# Question 3
+
+L'allaitement par la mère est une variable binaire que l'on veut considérer. Cependant, le jeu de données ne donne que la durée entre la naissance et la fin de l'allaitement grâce à la variable *wmonth*. On doit donc créer une variable binaire nommée $BreastFed$ égale à *breasted* si l'enfant a été allaité par la mère (donc *wmonth* strictement supérieur à 0), et *never breasted* si l'enfant n'a pas été allaité.
+On trace ensuite l'estimateur de Kaplan-Meier pour les 2 populations : enfants allaités et non allaités.
+
+```{r}
+# création de la variable BreastFed
+pneumon<-pneumon %>% mutate(BreastFed=recode(factor(wmonth>0),
+                                             'FALSE'='never breasted',
+                                             'TRUE'='breasted'))
+
+# estimateur de Kaplan-Meier pour les deux populations
+kmsurvival_BF <- survfit(Surv(chldage,hospital) ~ BreastFed, data = pneumon)
+autoplot(kmsurvival_BF, xlab = "Time (month)", ylab = "Survival Probability")
+```
+
+Les deux fonctions de survie empiriques ne se croisent pas. En revanche, les intervalles de confiance se chevauchent. Par conséquent, on doit effectuer le test du log-rank pour savoir si l'allaitement a un impact sur le développement d'une pneumonie. Le test du log-rank compare les deux fonctions de survie.
+
+```{r}
+# test du log-rank
+survdiff(Surv(chldage,hospital) ~ BreastFed, data = pneumon)
+```
+
+On obtient une p-value égale à 1e-04.
+La p-value est très faible, donc on rejette $H_0 =$ il n'y a pas de différence pour l'âge où on développe une pneumonie entre les deux populations. On en conclut qu'il y a probablement une association entre l'allaitement et le développement d'une pneumonie. Le graphique laisse penser que les enfants allaités sont moins atteints que les enfants non-allaités.
+
+# Question 4
+
+On cherche à tester l'hypothèse $H_0 : \beta_{breastFed}^*=0$ en utilisant le test de Wald et le test du rapport de vraisemblance.
+
+```{r}
+cox_model<-coxph(Surv(chldage,hospital) ~ BreastFed, data = pneumon)
+summary(cox_model)
+```
+
+La p-value associée au test de Wald est égale à 2e-04 < 0,01. On rejette donc l'hypothèse que $\beta_{breastFed}^*=0$.
+De même, la p-value associée au test du rapport de vraisemblance est égale à 5e-05 < 0,01. Une nouvelle fois, on rejette l'hypothèse que $\beta_{breastFed}^*=0$. Les fonctions de survie des deux populations semblent différentes.
+
+La valeur estimée de $\beta_{breastFed}^*$ vaut $\hat{\beta}_{breastFed}^*$ = -1,097, avec un écart type de 0,2973.
+
+# Question 5
+
+Les autres variables disponibles dans le jeu de données peuvent également être associées au développement d'une pneumonie. Ainsi, on souhaite tester si l'allaitement a réellement un impact sur le développement d'une pneumonie en ajoutant chaque variable dans des modèles séparés. Cela permettra de savoir si la durée entre la naissance et le développement d'une pneumonie est la même pour les enfants allaités et non-allaités lorsque l'on ajoute une variable dans le modèle initial. Cela revient à tester $H_0 : \beta_{breastFed}^*=0$ pour chaque modèle. On utilise le test de Wald pour cette question.
+
+```{r}
+# boucle for sur les variables du dataset
+for (var in names(pneumon[3:14]))
+{
+  # formule du modèle du Cox
+  formule<-paste(c("Surv(chldage, hospital) ~ BreastFed", var), collapse = '+')
+  formule<-as.formula(formule)
+  
+  # séparation des résultats de chaque modèle
+  cat(print(summary(coxph(formule, data=pneumon))), 
+      "\n", 
+      "-------------------------", 
+      "\n \n")
+}
+```
+
+Lorsque le modèle contient séparément les variables *mthage*, *urban*, *alcohol*, *smoke*, *region*, *poverty*, *bweight*, *race*, *education* ou *nsibs*, la p-value associée au test de Wald pour la variable *BreastFed* est toujours inférieure à 0,05. Pour ces modèles, on en conclut que le temps lié au développement d'une pneumonie n'est pas la même pour les enfants allaités et non-allaités.
+
+Pour les modèles avec les variables *wmonth* et *sfmonth*, la p-value est respectivement de 0,213 et 0,182. On rappelle que la variable *wmonth* correspond à la durée d'allaitement, et *sfmonth* la durée qu'il a fallu à l'enfant pour manger de la nourriture solide. Les résultats des deux tests concluent que le temps lié au développement d'une pneumonie est la même pour les enfants allaités et non-allaités. Cependant, il semble logique que ces 2 variables soient fortement corrélées à la variable *BreastFed*, ce qui fausse probablement le modèle et donc le test de Wald. Puisque l'on s'intéresse uniquement à la variable *BreastFed*, on ignore les variables *wmonth* et *sfmonth* dans la suite de l'exercice.
+
+# Question 6
+
+On construit un modèle step-by-step pour obtenir un modèle précis avec les variables du dataset les plus significatives. Les variables *wmonth* et *sfmonth* ne sont pas prises en compte.
+
+```{r, message=FALSE, warning=FALSE}
+# import de la librairie
+library(MASS)
+
+# construction du modèle step-by-step
+model_all= coxph(Surv(chldage,hospital) ~ .-wmonth-sfmonth, data = pneumon)
+model_selected = stepAIC(model_all, trace=F)
+summary(model_selected)
+```
+
+Le modèle final utilise les variables *mthage* (âge de la mère), *smoke* (variable binaire; si la mère a fumé pendant la grossesse), *nsibs* (nombre de frères et sœurs du nouveau-né) et *BreastFed*.
+On implémente ensuite ce modèle.
+
+```{r}
+cox_model_final<-coxph(Surv(chldage,hospital) ~ mthage + smoke + nsibs + BreastFed , data = pneumon)
+summary(cox_model_final)
+```
+
+Les valeurs des coefficients $\exp(\beta_j^*)$ nous indiquent l'influence des variables sur le développement d'une pneumonie.
+
+Le coefficient associé à *mthage* vaut 0.89, donc plus la mère est âgée et moins l'enfant risque de développer rapidement une pneumonie.
+
+Les coefficients associés à *smoke* sont 2,11 et 1,88, donc si la mère a fumé pendant la grossesse, alors l'enfant risque de développer plus rapidement une pneumonie.
+
+Le coefficient associé à *nsibs* vaut 1.47, donc plus l'enfant a de frères et sœurs et plus il risque de développer rapidement une pneumonie.
+
+Le coefficient associé à *BreastFed* vaut 0.41, donc si l'enfant a été allaité, alors il a moins de risque de développer rapidement une pneumonie.
+
+# Question 7
+
+On veut prédire la probabilité pour un nouveau-né de ne pas avoir développé de pneumonie à 6 mois. On connaît toutes les valeurs des variables, mais on utilise uniquement les variables du modèle. La mère du nouveau-né a 27 ans (*mthage* = 27), elle n'a pas fumé pendant la grossesse (*smoke* = 0) et n'a pas allaité l'enfant puisque *wmonth* = 0. Le nouveau-né a un frère ou une sœur (*nsibs* = 1).
+
+```{r}
+# définition du nouveau-né avec ses variables
+new_ind = data.frame(chldage = 6, hospital = 1, mthage = 27, smoke = 0, nsibs = 1, 
+                     BreastFed="never breasted") %>% mutate(smoke = as.factor(smoke))
+
+# prédiction de la probabilité
+print(exp(-predict(cox_model_final, newdata = new_ind, type = "expected")))
+```
+
+La probabilité de ne pas avoir développé de pneumonie à 6 mois pour le nouveau-né est de 0,9903.
