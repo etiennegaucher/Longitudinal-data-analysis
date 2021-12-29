@@ -1,3 +1,3 @@
-
+L’étude du TP1 consiste à savoir s’il existe ou non un lien entre l’allaitement des nouveau-nés et le risque de développer une pneumonie lors des 12 premiers mois de la vie. 3 470 nourrissons ont participé à l’enquête entre 1979 et 1986, et pour chacun, on a noté la durée entre la naissance et le développement d’une pneumonie.
 
 Le but du TP2 est d’utiliser les méthodes de l’analyse de survie pour développer un outil de maintenance prédictive pour une machine. Les données contiennent des mesures sur 1 000 machines, l’évènement d’intérêt est la panne. On veut prédire avec précision l’évènement panne dans les 2 semaines afin d’alerter à l’avance l’équipe de maintenance. Ce sont des données d’entraînement où on suppose que les valeurs enregistrées par les capteurs ne varient pas avec le temps. En situation réelle, ces données dépendraient évidemment du temps.
